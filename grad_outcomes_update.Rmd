@@ -1,0 +1,41 @@
+---
+title: "Fall 2016 & Spring 2017 First Term Non-Concurrent Student Award Outcomes"
+output: html_notebook
+---
+
+```{r, echo=F}
+library(tidyverse); theme_set(theme_minimal())
+```
+
+```{r, echo=F}
+data <- read.csv("2016_promise_grads.csv")
+data$P_F[is.na(data$P_F) == T] <- 0
+data$P_F <- ifelse(data$P_F == 1, "Promise", "Not Promise")
+data$AWARD_IND <- ifelse(data$AWARD_IND == 1, "Yes", "No")
+```
+
+The results below compare Promise students to non-Promise students. This data does not imply that Promise caused these differences because the typical SLCC student is different from the typical Promise student (given the requirements to receive Promise funds).   
+
+```{r, echo=F}
+data %>% 
+  group_by(P_F, AWARD_IND) %>% 
+  summarise(n = n()) %>%
+  mutate(Percent = round(100*n/sum(n), 2)) %>%
+  knitr::kable(col.names = c("", "Award", "Number of students", "Percent"))
+```
+
+```{r, echo=F}
+data %>% 
+  group_by(P_F, AWARD_IND) %>% 
+  summarise(n = n()) %>%
+  mutate(pct = round(100*(n/sum(n)), 1)) %>%
+  filter(AWARD_IND == "Yes") %>%
+  ggplot() + 
+  geom_bar(aes(y = pct, x = P_F, fill = P_F), stat = "identity") + 
+  labs(title = "Awards for First term Fall 2016/Spring 2017 Promise vs Other SLCC",
+       x = "", y = "Percent") +
+  scale_fill_manual(values = c("#00abe1", "#ffcd00")) + 
+  guides(fill = "none")
+
+```
+
