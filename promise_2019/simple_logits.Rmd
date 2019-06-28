@@ -185,6 +185,8 @@ mlm_data_ff <- mlm_data %>% filter(TERM_CODE == 201540 |
                                      TERM_CODE == 201640 |
                                      TERM_CODE == 201740 )
 
+## MLM final model
+# mlm_data_ff <- mlm_data_ff %>% filter(CREDITS_ATTEMTPED > 0)
 
 mlm_ff <- glmer(F_F ~ PROMISE +
                   scale(CREDITS_ATTEMTPED) + 
@@ -200,13 +202,165 @@ mlm_ff <- glmer(F_F ~ PROMISE +
                   slco + 
                   HIGH_SCHOOL_GPA + 
                   PRIOR_UG_GPA +
-                  (1|ETHNICITY) + 
+                  (1|ETHNICITY) +
                   (1|TERM_CODE), 
                 data = mlm_data_ff,
                 family = binomial)
 
 summary(mlm_ff)
 ```
+ 
+```{r, eval =T}
+# repeating the same analysis but using propensity socres
+
+mlm_data_ff_ps <- mlm_data %>% filter(TERM_CODE == 201540 |
+                                     TERM_CODE == 201640 |
+                                     TERM_CODE == 201740 )
+
+#
+
+mlm_data_ff_ps$white <- ifelse(mlm_data_ff_ps$ETHNICITY == "White", 1, 0)
+mlm_data_ff_ps$hll <- ifelse(mlm_data_ff_ps$ETHNICITY == "Hispanic", 1, 0)
+mlm_data_ff_ps$t2016 <- ifelse(mlm_data_ff_ps$TERM_CODE == "201640", 1, 0)
+mlm_data_ff_ps$t2017  <- ifelse(mlm_data_ff_ps$TERM_CODE == "201740", 1, 0)
+
+mlm_data_ff_ps <- mlm_data_ff_ps %>% dplyr::select(-TERM_CODE, -ETHNICITY)
+
+dms <- dummyVars(~., data = mlm_data_ff_ps, fullRank = TRUE)
+trst <- data.frame(predict(dms, newdata = mlm_data_ff_ps))
+
+
+library(caret)
+# Down sampling for PROMISE
+
+# tr_p <- mlm_data_ff_ps$PROMISE
+# y_ff <- trst$F_F
+# x <- trst %>% dplyr::select(-F_F, -TERM_UG_CREDITS, -CREDITS_ATTEMTPED)
+# x$PROMISE <- as.factor(x$PROMISE)
+# levels(x$PROMISE) <- c("NO", "YES")
+# 
+# ctrl <- trainControl(method = "cv", number = 5, 
+#   summaryFunction = twoClassSummary,
+#                      classProbs = T,
+#                      sampling = "down")
+# 
+# model_down <- train(PROMISE ~.,
+#                     data = x,
+#                  method="glm",family=binomial(),
+#                  metric = "ROC",
+#                  preProcess=c("center", "scale"),
+#                   trControl = ctrl)
+# 
+# summary(model_down)
+# model_down
+# 
+# model_down_prd <- predict(model_down, data = x, type= "prob")
+# 
+# fitted <- model_down_prd$YES
+# 
+# library(Matching)
+# 
+# matched_ps <- Match(Y = y_ff,
+#                     X = fitted,
+#                     Tr = tr_p)
+# 
+# summary(matched_ps) # close but no cigar for PS matching will try regular matching now
+
+# need to figure out how to check balance for this approach
+
+## basic match
+glm1 <- glm(PROMISE ~ 
+                  scale(AGE_ON_FIRST_DAY) + 
+                  GENDERMale +
+                  married +
+                  COLLEGE_READY_ENGLISHY +
+                  COLLEGE_READY_MATHY + 
+                  FIRST_GENERATION_INDY +
+                  FIRST_TERM_NON_CONCURRENT_INDY + 
+                  EVER_CONCURRENT_INDY +
+                  scale(PRIOR_UG_CREDITS) + 
+                  slco + 
+                  HIGH_SCHOOL_GPA + 
+                  PRIOR_UG_GPA +
+                  white + 
+                  hll + 
+                  t2016 + 
+                  t2017,
+            data = mlm_data_ff_ps,
+            family = binomial
+              )
+
+X <- glm1$fitted.values
+tr <- mlm_data_ff_ps$PROMISE
+Y <- mlm_data_ff_ps$F_F
+
+rr <- Match(Y=Y, Tr=tr, X=X)
+summary(rr)
+# when not using any control on term credits the estimated treatment effect of Promise is 4.5%... comparing students who took 11 credits to 7 credits. 
+# That ATT translates to approximately 16 additional students retaining F-F per semester
+
+mb <- MatchBalance(PROMISE ~., data = mlm_data_ff_ps, match.out = rr, nboots = 10)
+
+
+# limit to tc >6
+# 
+# mlm_data_ff_ps_tclimited <- mlm_data_ff_ps %>% filter(CREDITS_ATTEMTPED > 6)
+# 
+# glm1 <- glm(PROMISE ~ 
+#                   scale(AGE_ON_FIRST_DAY) + 
+#                   GENDERMale +
+#                   married +
+#                   COLLEGE_READY_ENGLISHY +
+#                   COLLEGE_READY_MATHY + 
+#                   FIRST_GENERATION_INDY +
+#                   FIRST_TERM_NON_CONCURRENT_INDY + 
+#                   EVER_CONCURRENT_INDY +
+#                   scale(PRIOR_UG_CREDITS) + 
+#                   slco + 
+#                   HIGH_SCHOOL_GPA + 
+#                   PRIOR_UG_GPA +
+#                   white + 
+#                   hll + 
+#                   t2016 + 
+#                   t2017,
+#             data = mlm_data_ff_ps_tclimited,
+#             family = binomial
+#               )
+# 
+# X <- glm1$fitted.values
+# tr <- mlm_data_ff_ps_tclimited$PROMISE
+# Y <- mlm_data_ff_ps_tclimited$F_F
+# 
+# rr <- Match(Y=Y, Tr=tr, X=X)
+# summary(rr)
+# 
+# # effect is gone at this point. 2.6% and not significant at .05
+# 
+# mb_2 <- MatchBalance(PROMISE ~., data = mlm_data_ff_ps_tclimited, match.out = rr, nboots = 10)
+
+#
+```
+
+# mediation on PS matched group
+
+```{r}
+ps_med_data <- rbind(mlm_data_ff[rr$index.treated,], mlm_data_ff[rr$index.control,])
+
+
+```
+
+```{r}
+library(MBESS)
+
+test <- mediation(ps_med_data$PROMISE, ps_med_data$TERM_UG_CREDITS, ps_med_data$F_F, conf.level = .95,
+                  bootstrap = FALSE, B=1000, which.boot = "both")
+
+test$Y.on.X
+test$Y.on.X.and.M
+test$M.on.X
+test$Effect.Sizes
+```
+
  
 ```{r}
 isSingular(mlm_ff)
@@ -378,3 +532,8 @@ plots <- rr2 %>%
 
 plots
 ```
+
+<!-- # ```{r} -->
+<!-- # stargazer(glm1, type="latex", single.row = T, title = "Propensity Score GLM model") -->
+<!-- # ``` -->
+
