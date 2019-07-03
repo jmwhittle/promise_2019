@@ -148,7 +148,12 @@ med_na_imputer <- function(x){
 # super interesting do more on this!
 # manually rename variables
 library(corrplot)
+
 cor_test <- cor(within(mlm_data, rm(TERM_CODE, ETHNICITY, HIGH_SCHOOL_GPA, PRIOR_UG_GPA)))
+colnames(cor_test)[18] <- "CREDITS_ATTEMPTED"
+row.names(cor_test)[18] <- "CREDITS_ATTEMPTED"
+
+
 corrplot(cor_test, diag = F, type = "upper", method = "color", tl.cex=0.5, order = "hclust")
 
 # no issues with correlation
